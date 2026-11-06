@@ -1,13 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { Type, Image as ImageIcon, Droplets, RotateCw, Trash2 } from 'lucide-react';
+import { Type, Droplets, RotateCw, Trash2, EyeOff, ShieldAlert } from 'lucide-react';
 import {
   addTextToPDF,
   addWatermark,
   rotatePDF,
   deletePagesFromPDF,
-  downloadPDF,
+  redactPDF,
 } from '@/lib/pdf-operations';
 
 interface PDFToolsProps {
@@ -25,7 +25,7 @@ export default function PDFTools({
   fileName,
   onPDFUpdate,
 }: PDFToolsProps) {
-  const [activeTab, setActiveTab] = useState<'text' | 'watermark' | 'rotate' | 'delete'>('text');
+  const [activeTab, setActiveTab] = useState<'text' | 'redact' | 'watermark' | 'rotate' | 'delete'>('text');
   const [loading, setLoading] = useState(false);
 
   // Text tool state
@@ -34,6 +34,13 @@ export default function PDFTools({
   const [textY, setTextY] = useState(50);
   const [fontSize, setFontSize] = useState(14);
   const [textColor, setTextColor] = useState('#000000');
+
+  // Redaction state
+  const [redactX, setRedactX] = useState(50);
+  const [redactY, setRedactY] = useState(100);
+  const [redactW, setRedactW] = useState(180);
+  const [redactH, setRedactH] = useState(30);
+  const [redactColor, setRedactColor] = useState<'black' | 'white'>('black');
 
   // Watermark state
   const [watermarkText, setWatermarkText] = useState('CONFIDENTIAL');
@@ -72,6 +79,12 @@ export default function PDFTools({
     );
   };
 
+  const handleRedact = () => {
+    withBuffer((buf) =>
+      redactPDF(buf, currentPage - 1, redactX, redactY, redactW, redactH, redactColor)
+    );
+  };
+
   const handleWatermark = () => {
     if (!watermarkText.trim()) return;
     withBuffer((buf) => addWatermark(buf, watermarkText, watermarkOpacity));
@@ -100,10 +113,11 @@ export default function PDFTools({
   };
 
   const tabs = [
-    { key: 'text', icon: Type, label: 'Add Text' },
+    { key: 'text', icon: Type, label: 'Text' },
+    { key: 'redact', icon: EyeOff, label: 'Redact' },
     { key: 'watermark', icon: Droplets, label: 'Watermark' },
     { key: 'rotate', icon: RotateCw, label: 'Rotate' },
-    { key: 'delete', icon: Trash2, label: 'Delete Pages' },
+    { key: 'delete', icon: Trash2, label: 'Delete' },
   ] as const;
 
   if (!pdfBuffer) {
@@ -116,18 +130,19 @@ export default function PDFTools({
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-1.5">
+      <div className="grid grid-cols-5 gap-1 bg-gray-100 p-1 rounded-xl">
         {tabs.map(({ key, icon: Icon, label }) => (
           <button
             key={key}
             onClick={() => setActiveTab(key)}
-            className={`flex items-center gap-1.5 py-2 px-3 text-xs rounded-lg font-medium transition-colors ${
+            className={`flex flex-col items-center justify-center py-1.5 px-1 text-[11px] rounded-lg font-medium transition-colors ${
               activeTab === key
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                ? 'bg-white text-blue-600 shadow-sm font-semibold'
+                : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            <Icon size={13} /> {label}
+            <Icon size={13} className="mb-0.5" />
+            {label}
           </button>
         ))}
       </div>
@@ -146,47 +161,160 @@ export default function PDFTools({
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">X Position</label>
-                <input type="number" value={textX} onChange={(e) => setTextX(Number(e.target.value))}
-                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input
+                  type="number"
+                  value={textX}
+                  onChange={(e) => setTextX(Number(e.target.value))}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Y Position</label>
-                <input type="number" value={textY} onChange={(e) => setTextY(Number(e.target.value))}
-                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input
+                  type="number"
+                  value={textY}
+                  onChange={(e) => setTextY(Number(e.target.value))}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Font Size</label>
-                <input type="number" value={fontSize} min={6} max={72} onChange={(e) => setFontSize(Number(e.target.value))}
-                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input
+                  type="number"
+                  value={fontSize}
+                  min={6}
+                  max={72}
+                  onChange={(e) => setFontSize(Number(e.target.value))}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Color</label>
-                <input type="color" value={textColor} onChange={(e) => setTextColor(e.target.value)}
-                  className="w-full h-9 border border-gray-200 rounded-lg cursor-pointer" />
+                <input
+                  type="color"
+                  value={textColor}
+                  onChange={(e) => setTextColor(e.target.value)}
+                  className="w-full h-9 border border-gray-200 rounded-lg cursor-pointer"
+                />
               </div>
             </div>
-            <button onClick={handleAddText} disabled={loading || !textContent.trim()}
-              className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium transition-colors">
+            <button
+              onClick={handleAddText}
+              disabled={loading || !textContent.trim()}
+              className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+            >
               {loading ? 'Adding...' : 'Add Text'}
+            </button>
+          </>
+        )}
+
+        {activeTab === 'redact' && (
+          <>
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-xs text-amber-800 flex items-start gap-2">
+              <ShieldAlert size={16} className="text-amber-600 shrink-0 mt-0.5" />
+              <span>
+                Permanently blacks out or whites out sensitive text or numbers on Page {currentPage}.
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">X Position</label>
+                <input
+                  type="number"
+                  value={redactX}
+                  onChange={(e) => setRedactX(Number(e.target.value))}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Y Position</label>
+                <input
+                  type="number"
+                  value={redactY}
+                  onChange={(e) => setRedactY(Number(e.target.value))}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Width</label>
+                <input
+                  type="number"
+                  value={redactW}
+                  onChange={(e) => setRedactW(Number(e.target.value))}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Height</label>
+                <input
+                  type="number"
+                  value={redactH}
+                  onChange={(e) => setRedactH(Number(e.target.value))}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setRedactColor('black')}
+                className={`flex-1 py-1.5 text-xs rounded-lg font-medium border transition-colors ${
+                  redactColor === 'black'
+                    ? 'bg-black text-white border-black'
+                    : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                Blackout Box
+              </button>
+              <button
+                type="button"
+                onClick={() => setRedactColor('white')}
+                className={`flex-1 py-1.5 text-xs rounded-lg font-medium border transition-colors ${
+                  redactColor === 'white'
+                    ? 'bg-gray-200 text-gray-900 border-gray-400 font-semibold'
+                    : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                Whiteout Box
+              </button>
+            </div>
+            <button
+              onClick={handleRedact}
+              disabled={loading}
+              className="w-full py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+            >
+              {loading ? 'Applying...' : `Redact Area on Page ${currentPage}`}
             </button>
           </>
         )}
 
         {activeTab === 'watermark' && (
           <>
-            <input value={watermarkText} onChange={(e) => setWatermarkText(e.target.value)}
+            <input
+              value={watermarkText}
+              onChange={(e) => setWatermarkText(e.target.value)}
               placeholder="Watermark text (e.g. CONFIDENTIAL)"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
             <div>
               <label className="text-xs text-gray-500 mb-1 block">
                 Opacity: {Math.round(watermarkOpacity * 100)}%
               </label>
-              <input type="range" min={0.05} max={0.8} step={0.05} value={watermarkOpacity}
+              <input
+                type="range"
+                min={0.05}
+                max={0.8}
+                step={0.05}
+                value={watermarkOpacity}
                 onChange={(e) => setWatermarkOpacity(Number(e.target.value))}
-                className="w-full accent-blue-600" />
+                className="w-full accent-blue-600"
+              />
             </div>
-            <button onClick={handleWatermark} disabled={loading || !watermarkText.trim()}
-              className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium transition-colors">
+            <button
+              onClick={handleWatermark}
+              disabled={loading || !watermarkText.trim()}
+              className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+            >
               {loading ? 'Applying...' : 'Apply Watermark'}
             </button>
           </>
@@ -196,26 +324,35 @@ export default function PDFTools({
           <>
             <div className="flex gap-2">
               {([90, 180, 270] as const).map((deg) => (
-                <button key={deg} onClick={() => setRotateAngle(deg)}
+                <button
+                  key={deg}
+                  onClick={() => setRotateAngle(deg)}
                   className={`flex-1 py-2 text-sm rounded-lg font-medium transition-colors ${
                     rotateAngle === deg ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'
-                  }`}>
+                  }`}
+                >
                   {deg}°
                 </button>
               ))}
             </div>
             <div className="flex gap-2">
               {(['current', 'all'] as const).map((t) => (
-                <button key={t} onClick={() => setRotateTarget(t)}
+                <button
+                  key={t}
+                  onClick={() => setRotateTarget(t)}
                   className={`flex-1 py-2 text-xs rounded-lg font-medium transition-colors ${
                     rotateTarget === t ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'
-                  }`}>
+                  }`}
+                >
                   {t === 'current' ? `Page ${currentPage} only` : 'All Pages'}
                 </button>
               ))}
             </div>
-            <button onClick={handleRotate} disabled={loading}
-              className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium transition-colors">
+            <button
+              onClick={handleRotate}
+              disabled={loading}
+              className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+            >
               {loading ? 'Rotating...' : 'Rotate Pages'}
             </button>
           </>
@@ -224,12 +361,18 @@ export default function PDFTools({
         {activeTab === 'delete' && (
           <>
             <p className="text-xs text-gray-500">Your PDF has {pageCount} pages</p>
-            <input value={pagesToDelete} onChange={(e) => setPagesToDelete(e.target.value)}
+            <input
+              value={pagesToDelete}
+              onChange={(e) => setPagesToDelete(e.target.value)}
               placeholder="e.g. 2, 4, 7"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
             <p className="text-xs text-gray-400">Enter page numbers separated by commas</p>
-            <button onClick={handleDelete} disabled={loading || !pagesToDelete.trim()}
-              className="w-full py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium transition-colors">
+            <button
+              onClick={handleDelete}
+              disabled={loading || !pagesToDelete.trim()}
+              className="w-full py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+            >
               {loading ? 'Deleting...' : 'Delete Pages'}
             </button>
           </>

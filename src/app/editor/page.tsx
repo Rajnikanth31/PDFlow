@@ -5,19 +5,24 @@ import { useDropzone } from 'react-dropzone';
 import {
   FileText, Upload, ChevronLeft, ChevronRight,
   ZoomIn, ZoomOut, Download, Lock, Unlock,
-  PenTool, Scissors, Merge, Settings, RotateCcw
+  PenTool, Scissors, Merge, Settings, RotateCcw,
+  Layers, Minimize2, Image as ImageIcon, FileSearch,
+  Sun, Moon
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
 import MergePDF from '@/components/MergePDF';
 import SplitPDF from '@/components/SplitPDF';
 import PDFTools from '@/components/PDFTools';
+import PageOrganizer from '@/components/PageOrganizer';
+import CompressPDF from '@/components/CompressPDF';
+import ImageConverter from '@/components/ImageConverter';
+import OCRTool from '@/components/OCRTool';
 import PasswordDialog from '@/components/PasswordDialog';
 import SignatureCanvas from '@/components/SignatureCanvas';
 import {
   addPasswordToPDF,
   removePasswordFromPDF,
-  isPDFEncrypted,
   addImageToPDF,
   getPDFPageCount,
   downloadPDF,
@@ -26,7 +31,7 @@ import {
 // Dynamically import PDF viewer to avoid SSR issues
 const PDFViewer = dynamic(() => import('@/components/PDFViewer'), { ssr: false });
 
-type SidebarTab = 'tools' | 'merge' | 'split';
+type SidebarTab = 'tools' | 'organize' | 'compress' | 'convert' | 'extract' | 'merge' | 'split';
 
 export default function EditorPage() {
   const [pdfBuffer, setPdfBuffer] = useState<ArrayBuffer | null>(null);
@@ -39,6 +44,7 @@ export default function EditorPage() {
   const [passwordMode, setPasswordMode] = useState<'add' | 'remove' | null>(null);
   const [showSignature, setShowSignature] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
   // Stored password if file was unlocked on open
   const [currentFilePassword, setCurrentFilePassword] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -70,8 +76,10 @@ export default function EditorPage() {
     noClick: !!pdfUrl,
   });
 
-  const handlePDFUpdate = (buffer: ArrayBuffer) => {
+  const handlePDFUpdate = async (buffer: ArrayBuffer) => {
     setPdfBuffer(buffer);
+    const count = await getPDFPageCount(buffer);
+    setPageCount(count);
     const url = URL.createObjectURL(new Blob([buffer], { type: 'application/pdf' }));
     setPdfUrl(url);
   };
@@ -80,13 +88,11 @@ export default function EditorPage() {
     if (!pdfBuffer) return;
     setLoading(true);
     try {
-      // Attempt removal using any remembered password or empty password
       const result = await removePasswordFromPDF(pdfBuffer, currentFilePassword);
-      handlePDFUpdate(result.buffer as ArrayBuffer);
+      await handlePDFUpdate(result.buffer as ArrayBuffer);
       setCurrentFilePassword('');
       alert('Password removed! The PDF is now unlocked in the editor. You can download it anytime using the Download button.');
     } catch {
-      // If direct removal requires user input, then open dialog
       setPasswordMode('remove');
     } finally {
       setLoading(false);
@@ -100,11 +106,11 @@ export default function EditorPage() {
       let result: Uint8Array;
       if (passwordMode === 'add') {
         result = await addPasswordToPDF(pdfBuffer, password, ownerPassword);
-        handlePDFUpdate(result.buffer as ArrayBuffer);
+        await handlePDFUpdate(result.buffer as ArrayBuffer);
         alert('Password protection added! Click Download when you are ready to save the file.');
       } else {
         result = await removePasswordFromPDF(pdfBuffer, password || currentFilePassword);
-        handlePDFUpdate(result.buffer as ArrayBuffer);
+        await handlePDFUpdate(result.buffer as ArrayBuffer);
         setCurrentFilePassword('');
         alert('Password removed! The PDF is now unlocked in the editor. You can download it anytime using the Download button.');
       }
@@ -132,7 +138,7 @@ export default function EditorPage() {
         pdfBuffer, imageBuffer, 'png',
         currentPage - 1, 50, 50, 200, 80
       );
-      handlePDFUpdate(result.buffer as ArrayBuffer);
+      await handlePDFUpdate(result.buffer as ArrayBuffer);
     } catch (err) {
       console.error(err);
       alert('Failed to embed signature.');
@@ -143,28 +149,43 @@ export default function EditorPage() {
 
   const sidebarTabs = [
     { key: 'tools', icon: Settings, label: 'Edit' },
+    { key: 'organize', icon: Layers, label: 'Organize' },
+    { key: 'compress', icon: Minimize2, label: 'Compress' },
+    { key: 'convert', icon: ImageIcon, label: 'Convert' },
+    { key: 'extract', icon: FileSearch, label: 'OCR' },
     { key: 'merge', icon: Merge, label: 'Merge' },
     { key: 'split', icon: Scissors, label: 'Split' },
   ] as const;
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
+    <div className={`flex h-screen overflow-hidden ${isDarkMode ? 'dark bg-slate-950 text-slate-100' : 'bg-gray-50'}`}>
       {/* Sidebar */}
-      <aside className="w-72 bg-white border-r border-gray-100 flex flex-col shadow-sm">
-        <div className="p-4 border-b border-gray-100">
+      <aside className={`w-80 border-r flex flex-col shadow-sm transition-colors ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-100'}`}>
+        <div className={`p-4 border-b flex items-center justify-between ${isDarkMode ? 'border-slate-800' : 'border-gray-100'}`}>
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-sm">
               <FileText size={16} className="text-white" />
             </div>
             <div>
-              <h1 className="font-bold text-gray-800 text-sm">PDFlow</h1>
-              <p className="text-xs text-gray-400">Modern PDF Studio</p>
+              <h1 className="font-bold text-sm tracking-tight">PDFlow</h1>
+              <p className="text-[11px] text-gray-400">All-in-One PDF Studio</p>
             </div>
           </div>
+
+          {/* Dark mode button */}
+          <button
+            onClick={() => setIsDarkMode((prev) => !prev)}
+            className={`p-1.5 rounded-lg text-xs transition-colors ${
+              isDarkMode ? 'text-amber-400 hover:bg-slate-800' : 'text-gray-500 hover:bg-gray-100'
+            }`}
+            title="Toggle Dark Mode"
+          >
+            {isDarkMode ? <Sun size={15} /> : <Moon size={15} />}
+          </button>
         </div>
 
         {/* Open File button */}
-        <div className="p-4 border-b border-gray-100">
+        <div className={`p-3.5 border-b ${isDarkMode ? 'border-slate-800' : 'border-gray-100'}`}>
           <input
             ref={fileInputRef}
             type="file"
@@ -174,72 +195,76 @@ export default function EditorPage() {
           />
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors text-sm font-medium"
+            className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors text-xs font-semibold shadow-sm"
           >
-            <Upload size={15} /> Open PDF
+            <Upload size={14} /> Open PDF
           </button>
           {fileName && pdfUrl && (
-            <p className="text-xs text-gray-400 mt-2 truncate text-center" title={fileName}>
+            <p className="text-[11px] text-gray-400 mt-2 truncate text-center" title={fileName}>
               {fileName}
             </p>
           )}
         </div>
 
         {/* Sidebar Tab Nav */}
-        <div className="flex border-b border-gray-100">
+        <div className={`grid grid-cols-7 border-b ${isDarkMode ? 'border-slate-800' : 'border-gray-100'}`}>
           {sidebarTabs.map(({ key, icon: Icon, label }) => (
             <button
               key={key}
               onClick={() => setSidebarTab(key)}
-              className={`flex-1 flex flex-col items-center gap-1 py-2.5 text-xs font-medium transition-colors ${
+              title={label}
+              className={`flex flex-col items-center justify-center gap-1 py-2 text-[10px] font-medium transition-colors border-b-2 ${
                 sidebarTab === key
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-500 hover:text-gray-700'
+                  ? 'text-blue-600 border-blue-600 bg-blue-50/50 dark:bg-blue-950/20'
+                  : 'text-gray-400 hover:text-gray-600 border-transparent'
               }`}
             >
-              <Icon size={15} />
-              {label}
+              <Icon size={14} />
+              <span className="truncate max-w-[40px]">{label}</span>
             </button>
           ))}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {sidebarTab === 'tools' && (
-            <div className="space-y-5">
-              {/* Password tools */}
+            <div className="space-y-4">
+              {/* Security Tools */}
               <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2.5">
-                  Security
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">
+                  Security & Signing
                 </p>
-                <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-1.5">
                   <button
                     onClick={() => setPasswordMode('add')}
                     disabled={!pdfBuffer}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="flex flex-col items-center justify-center gap-1 p-2 text-[11px] text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-xl transition-colors disabled:opacity-40"
                   >
-                    <Lock size={15} className="text-blue-500" /> Add Password
+                    <Lock size={14} className="text-blue-500" />
+                    <span>Lock</span>
                   </button>
                   <button
                     onClick={handleRemovePasswordClick}
                     disabled={!pdfBuffer}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-gray-700 hover:bg-orange-50 hover:text-orange-700 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="flex flex-col items-center justify-center gap-1 p-2 text-[11px] text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-slate-800 hover:bg-orange-50 dark:hover:bg-orange-900/30 rounded-xl transition-colors disabled:opacity-40"
                   >
-                    <Unlock size={15} className="text-orange-500" /> Remove Password
+                    <Unlock size={14} className="text-orange-500" />
+                    <span>Unlock</span>
                   </button>
                   <button
                     onClick={() => setShowSignature(true)}
                     disabled={!pdfBuffer}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-gray-700 hover:bg-green-50 hover:text-green-700 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="flex flex-col items-center justify-center gap-1 p-2 text-[11px] text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-slate-800 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-xl transition-colors disabled:opacity-40"
                   >
-                    <PenTool size={15} className="text-green-500" /> Add Signature
+                    <PenTool size={14} className="text-green-500" />
+                    <span>Sign</span>
                   </button>
                 </div>
               </div>
 
-              {/* PDF Editing Tools */}
+              {/* Editing Tools */}
               <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2.5">
-                  Edit Tools
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">
+                  Document Tools
                 </p>
                 <PDFTools
                   pdfBuffer={pdfBuffer}
@@ -249,27 +274,35 @@ export default function EditorPage() {
                   onPDFUpdate={handlePDFUpdate}
                 />
               </div>
-
-              {/* Download */}
-              {pdfBuffer && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2.5">
-                    Export
-                  </p>
-                  <button
-                    onClick={() => {
-                      if (pdfBuffer) {
-                        const bytes = new Uint8Array(pdfBuffer);
-                        downloadPDF(bytes, fileName);
-                      }
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    <Download size={15} className="text-gray-500" /> Download PDF
-                  </button>
-                </div>
-              )}
             </div>
+          )}
+
+          {sidebarTab === 'organize' && (
+            <PageOrganizer pdfBuffer={pdfBuffer} onPDFUpdate={handlePDFUpdate} />
+          )}
+
+          {sidebarTab === 'compress' && (
+            <CompressPDF
+              pdfBuffer={pdfBuffer}
+              fileName={fileName}
+              onPDFUpdate={handlePDFUpdate}
+            />
+          )}
+
+          {sidebarTab === 'convert' && (
+            <ImageConverter
+              pdfBuffer={pdfBuffer}
+              fileName={fileName}
+              onPDFUpdate={handlePDFUpdate}
+            />
+          )}
+
+          {sidebarTab === 'extract' && (
+            <OCRTool
+              pdfBuffer={pdfBuffer}
+              currentPage={currentPage}
+              fileName={fileName}
+            />
           )}
 
           {sidebarTab === 'merge' && <MergePDF />}
@@ -288,50 +321,54 @@ export default function EditorPage() {
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* Top Toolbar */}
         {pdfUrl && (
-          <div className="bg-white border-b border-gray-100 px-4 py-2.5 flex items-center gap-4 shadow-sm">
+          <div className={`px-4 py-2.5 flex items-center gap-4 border-b transition-colors shadow-sm ${
+            isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-white border-gray-100 text-gray-700'
+          }`}>
             {/* Page navigation */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage <= 1}
-                className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronLeft size={16} />
               </button>
-              <span className="text-sm text-gray-600 min-w-[80px] text-center">
+              <span className="text-xs min-w-[75px] text-center font-medium">
                 Page {currentPage} of {pageCount}
               </span>
               <button
                 onClick={() => setCurrentPage((p) => Math.min(pageCount, p + 1))}
                 disabled={currentPage >= pageCount}
-                className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronRight size={16} />
               </button>
             </div>
 
-            <div className="w-px h-5 bg-gray-200" />
+            <div className={`w-px h-5 ${isDarkMode ? 'bg-slate-800' : 'bg-gray-200'}`} />
 
             {/* Zoom controls */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setScale((s) => Math.max(0.5, s - 0.1))}
-                className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                title="Zoom Out"
               >
                 <ZoomOut size={16} />
               </button>
-              <span className="text-sm text-gray-600 min-w-[48px] text-center">
+              <span className="text-xs min-w-[44px] text-center font-medium">
                 {Math.round(scale * 100)}%
               </span>
               <button
                 onClick={() => setScale((s) => Math.min(3, s + 0.1))}
-                className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                title="Zoom In"
               >
                 <ZoomIn size={16} />
               </button>
               <button
                 onClick={() => setScale(1)}
-                className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
                 title="Reset zoom"
               >
                 <RotateCcw size={14} />
@@ -340,8 +377,8 @@ export default function EditorPage() {
 
             <div className="ml-auto flex items-center gap-3">
               {loading && (
-                <div className="flex items-center gap-2 text-sm text-blue-600">
-                  <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                <div className="flex items-center gap-2 text-xs text-blue-500 font-medium">
+                  <div className="w-3.5 h-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
                   Processing...
                 </div>
               )}
@@ -352,7 +389,7 @@ export default function EditorPage() {
                     downloadPDF(bytes, fileName);
                   }
                 }}
-                className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs font-semibold shadow-sm"
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors text-xs font-semibold shadow-sm"
               >
                 <Download size={14} /> Download PDF
               </button>
@@ -361,7 +398,12 @@ export default function EditorPage() {
         )}
 
         {/* PDF Viewer Area */}
-        <div className="flex-1 overflow-auto bg-gray-100 p-6" {...getRootProps()}>
+        <div
+          className={`flex-1 overflow-auto p-6 transition-colors ${
+            isDarkMode ? 'bg-slate-950' : 'bg-gray-100'
+          }`}
+          {...getRootProps()}
+        >
           <input {...getInputProps()} />
           {pdfUrl ? (
             <PDFViewer
@@ -370,24 +412,38 @@ export default function EditorPage() {
               currentPage={currentPage}
               onPageChange={setCurrentPage}
               onPasswordSuccess={(pw) => setCurrentFilePassword(pw)}
+              isDarkMode={isDarkMode}
             />
           ) : (
-            <div className={`h-full flex items-center justify-center ${isDragActive ? 'bg-blue-50' : ''}`}>
-              <div className="text-center max-w-sm">
-                <div className="w-20 h-20 bg-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
-                  <Upload size={36} className="text-blue-500" />
+            <div className={`h-full flex items-center justify-center ${isDragActive ? 'bg-blue-50/50' : ''}`}>
+              <div className="text-center max-w-md">
+                <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-5 shadow-sm">
+                  <Upload size={36} />
                 </div>
-                <h2 className="text-xl font-semibold text-gray-700 mb-2">
-                  {isDragActive ? 'Drop your PDF here' : 'Open a PDF to get started'}
+                <h2 className="text-xl font-bold mb-2">
+                  {isDragActive ? 'Drop your PDF here' : 'Drop your PDF to start'}
                 </h2>
-                <p className="text-gray-400 text-sm mb-6">
-                  Drag & drop a PDF file here, or use the button in the sidebar
+                <p className="text-gray-400 text-xs mb-6">
+                  Drag & drop any PDF or click Open PDF to edit, organize, compress, unlock, or sign.
                 </p>
-                <div className="flex flex-wrap justify-center gap-2 text-xs text-gray-400">
-                  {['✅ View & Navigate', '🔒 Password Protection', '✍️ E-Signatures',
-                    '🔀 Merge PDFs', '✂️ Split PDFs', '💧 Watermarks',
-                    '🔄 Rotate Pages', '🗑️ Delete Pages', '📝 Add Text'].map((f) => (
-                    <span key={f} className="bg-white px-2.5 py-1 rounded-full border border-gray-200">{f}</span>
+                <div className="flex flex-wrap justify-center gap-2 text-[11px] text-gray-500">
+                  {[
+                    '🔒 Password Remover',
+                    '🗜️ Compressor',
+                    '🗂️ Page Organizer',
+                    '🖼️ Images ⇄ PDF',
+                    '⬛ Redaction',
+                    '✍️ E-Signatures',
+                    '🔍 In-Doc Search',
+                    '📄 OCR Extraction',
+                    '🔀 Merge & Split',
+                  ].map((f) => (
+                    <span
+                      key={f}
+                      className="bg-white dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm"
+                    >
+                      {f}
+                    </span>
                   ))}
                 </div>
               </div>

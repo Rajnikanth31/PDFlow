@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Lock } from 'lucide-react';
+import { Lock, Search, ChevronDown, ChevronUp, X, Moon, Sun } from 'lucide-react';
 
 interface PDFViewerProps {
   fileUrl: string;
@@ -9,6 +9,7 @@ interface PDFViewerProps {
   currentPage: number;
   onPageChange: (page: number) => void;
   onPasswordSuccess?: (password: string) => void;
+  isDarkMode?: boolean;
 }
 
 export default function PDFViewer({
@@ -17,6 +18,7 @@ export default function PDFViewer({
   currentPage,
   onPageChange,
   onPasswordSuccess,
+  isDarkMode = false,
 }: PDFViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [pdfDoc, setPdfDoc] = useState<unknown>(null);
@@ -26,12 +28,33 @@ export default function PDFViewer({
   const [passwordError, setPasswordError] = useState(false);
   const renderTaskRef = useRef<{ cancel: () => void } | null>(null);
 
+  // Search state
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<{ page: number; count: number }[]>([]);
+  const [searchIndex, setSearchIndex] = useState(0);
+  const [searching, setSearching] = useState(false);
+
+  // Global Ctrl+F listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        setShowSearch((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // Load PDF document
   useEffect(() => {
     let cancelled = false;
     setPasswordCallback(null);
     setPasswordError(false);
     setPasswordInput('');
+    setSearchResults([]);
+    setSearchQuery('');
 
     const loadPdf = async () => {
       const pdfjsLib = await import('pdfjs-dist');
@@ -104,6 +127,53 @@ export default function PDFViewer({
     renderPage();
   }, [pdfDoc, currentPage, scale]);
 
+  // Search logic across all pages
+  const handleSearch = async () => {
+    if (!pdfDoc || !searchQuery.trim()) return;
+    setSearching(true);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const doc = pdfDoc as any;
+      const results: { page: number; count: number }[] = [];
+      const q = searchQuery.toLowerCase();
+
+      for (let i = 1; i <= doc.numPages; i++) {
+        const page = await doc.getPage(i);
+        const textContent = await page.getTextContent();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const pageText = textContent.items.map((it: any) => it.str).join(' ').toLowerCase();
+        const matches = (pageText.match(new RegExp(q, 'g')) || []).length;
+        if (matches > 0) {
+          results.push({ page: i, count: matches });
+        }
+      }
+
+      setSearchResults(results);
+      setSearchIndex(0);
+      if (results.length > 0) {
+        onPageChange(results[0].page);
+      }
+    } catch (err) {
+      console.error('Search error:', err);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleNextMatch = () => {
+    if (searchResults.length === 0) return;
+    const next = (searchIndex + 1) % searchResults.length;
+    setSearchIndex(next);
+    onPageChange(searchResults[next].page);
+  };
+
+  const handlePrevMatch = () => {
+    if (searchResults.length === 0) return;
+    const prev = (searchIndex - 1 + searchResults.length) % searchResults.length;
+    setSearchIndex(prev);
+    onPageChange(searchResults[prev].page);
+  };
+
   const handlePasswordSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (passwordCallback && passwordInput) {
@@ -115,8 +185,64 @@ export default function PDFViewer({
     }
   };
 
+  const totalMatches = searchResults.reduce((acc, r) => acc + r.count, 0);
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-full py-6">
+    <div className="relative flex flex-col items-center justify-center min-h-full py-6">
+      {/* Floating In-Document Search Bar */}
+      {showSearch && (
+        <div className="fixed top-20 right-8 z-30 bg-white/95 backdrop-blur-md border border-gray-200 rounded-2xl shadow-xl p-2.5 flex items-center gap-2">
+          <Search size={15} className="text-gray-400 ml-1.5" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            placeholder="Search text in document..."
+            className="text-xs border-0 outline-none w-48 text-gray-700 bg-transparent"
+            autoFocus
+          />
+          {searching ? (
+            <span className="text-[10px] text-gray-400 px-1">Searching...</span>
+          ) : searchResults.length > 0 ? (
+            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+              P.{searchResults[searchIndex]?.page} ({searchIndex + 1}/{searchResults.length})
+            </span>
+          ) : searchQuery ? (
+            <span className="text-[10px] text-gray-400 px-1">0 matches</span>
+          ) : null}
+
+          <div className="flex items-center gap-0.5 border-l border-gray-200 pl-1.5">
+            <button
+              onClick={handlePrevMatch}
+              disabled={searchResults.length === 0}
+              className="p-1 text-gray-500 hover:bg-gray-100 rounded-lg disabled:opacity-30"
+              title="Previous match"
+            >
+              <ChevronUp size={14} />
+            </button>
+            <button
+              onClick={handleNextMatch}
+              disabled={searchResults.length === 0}
+              className="p-1 text-gray-500 hover:bg-gray-100 rounded-lg disabled:opacity-30"
+              title="Next match"
+            >
+              <ChevronDown size={14} />
+            </button>
+            <button
+              onClick={() => {
+                setShowSearch(false);
+                setSearchQuery('');
+                setSearchResults([]);
+              }}
+              className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {rendering && (
         <div className="mb-4 flex items-center gap-2 text-sm text-gray-500">
           <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -155,7 +281,11 @@ export default function PDFViewer({
           </form>
         </div>
       ) : (
-        <div className="shadow-2xl rounded-sm overflow-hidden bg-white">
+        <div
+          className={`shadow-2xl rounded-sm overflow-hidden transition-all duration-300 ${
+            isDarkMode ? 'bg-slate-900 invert-[0.9] hue-rotate-180 ring-1 ring-slate-800' : 'bg-white'
+          }`}
+        >
           <canvas ref={canvasRef} className="block" />
         </div>
       )}

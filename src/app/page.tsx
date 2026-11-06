@@ -1,18 +1,23 @@
 import Link from 'next/link';
 import {
   FileText, Upload, Lock, Scissors, Merge,
-  PenTool, Droplets, RotateCw, ArrowRight, Code2
+  PenTool, Droplets, RotateCw, ArrowRight, Code2,
+  Minimize2, Layers, Image as ImageIcon, EyeOff, Search
 } from 'lucide-react';
 
 const features = [
-  { icon: FileText, title: 'View & Navigate', desc: 'Smooth PDF rendering with zoom and page navigation', color: 'bg-blue-100 text-blue-600' },
-  { icon: Lock, title: 'Password Protection', desc: 'Add or remove passwords to secure your documents', color: 'bg-purple-100 text-purple-600' },
-  { icon: PenTool, title: 'E-Signatures', desc: 'Draw and embed your signature directly on PDFs', color: 'bg-green-100 text-green-600' },
-  { icon: Merge, title: 'Merge PDFs', desc: 'Combine multiple PDFs into one — drag to reorder', color: 'bg-orange-100 text-orange-600' },
-  { icon: Scissors, title: 'Split PDFs', desc: 'Extract page ranges or split into individual pages', color: 'bg-red-100 text-red-600' },
-  { icon: Droplets, title: 'Watermarks', desc: 'Add custom text watermarks with adjustable opacity', color: 'bg-cyan-100 text-cyan-600' },
-  { icon: RotateCw, title: 'Rotate Pages', desc: 'Rotate individual pages or the entire document', color: 'bg-yellow-100 text-yellow-600' },
-  { icon: FileText, title: 'Add Text', desc: 'Insert text annotations anywhere on any page', color: 'bg-indigo-100 text-indigo-600' },
+  { icon: Lock, title: 'Unlock & Protect', desc: 'Remove passwords or add AES security to documents', color: 'bg-purple-100 text-purple-600' },
+  { icon: Minimize2, title: 'Smart Compression', desc: 'Optimize and shrink file size without losing quality', color: 'bg-emerald-100 text-emerald-600' },
+  { icon: Layers, title: 'Page Organizer', desc: 'Visual thumbnail grid — drag to reorder, duplicate & rotate', color: 'bg-blue-100 text-blue-600' },
+  { icon: ImageIcon, title: 'Images ⇄ PDF', desc: 'Convert JPG/PNG to PDF or export pages as images', color: 'bg-amber-100 text-amber-600' },
+  { icon: EyeOff, title: 'Redact & Whiteout', desc: 'Black out or white out sensitive private information', color: 'bg-red-100 text-red-600' },
+  { icon: PenTool, title: 'E-Signatures', desc: 'Draw and embed custom signatures directly on PDFs', color: 'bg-green-100 text-green-600' },
+  { icon: Search, title: 'In-Document Search', desc: 'Fast Ctrl+F search across all pages with jump navigation', color: 'bg-cyan-100 text-cyan-600' },
+  { icon: Merge, title: 'Merge & Split', desc: 'Combine multiple PDFs or extract custom page ranges', color: 'bg-orange-100 text-orange-600' },
+  { icon: Droplets, title: 'Watermarks', desc: 'Add custom text watermarks with adjustable opacity', color: 'bg-sky-100 text-sky-600' },
+  { icon: RotateCw, title: 'Rotate & Delete', desc: 'Rotate individual pages or bulk delete unwanted pages', color: 'bg-yellow-100 text-yellow-600' },
+  { icon: FileText, title: 'Text Extraction (OCR)', desc: 'Extract selectable text, copy or download as .txt', color: 'bg-indigo-100 text-indigo-600' },
+  { icon: FileText, title: 'Add Annotations', desc: 'Insert custom text stamps anywhere on any page', color: 'bg-pink-100 text-pink-600' },
 ];
 
 export default function HomePage() {
@@ -40,23 +45,23 @@ export default function HomePage() {
 
       {/* Hero */}
       <section className="max-w-4xl mx-auto px-6 pt-20 pb-16 text-center">
-        <div className="inline-flex items-center gap-2 bg-blue-100 text-blue-700 text-xs font-medium px-3 py-1.5 rounded-full mb-6">
+        <div className="inline-flex items-center gap-2 bg-blue-100 text-blue-700 text-xs font-medium px-3.5 py-1.5 rounded-full mb-6">
           <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
-          100% free & private — works in your browser
+          100% Free & Private — Works in your browser
         </div>
         <h1 className="text-5xl font-bold text-gray-900 mb-5 leading-tight">
           PDF tools that just<br />
           <span className="text-blue-600">Flow</span>
         </h1>
         <p className="text-xl text-gray-500 mb-10 max-w-xl mx-auto leading-relaxed">
-          View, edit, merge, split, sign, watermark, and unlock secured PDFs — all in one place with zero clutter.
+          View, organize, compress, unlock, redact, convert, sign, and edit PDFs — all in one modern studio with zero clutter.
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Link
             href="/editor"
             className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 transition-colors font-semibold text-lg shadow-lg shadow-blue-200"
           >
-            <Upload size={20} /> Open PDFlow Editor
+            <Upload size={20} /> Open PDFlow Studio
             <ArrowRight size={18} />
           </Link>
         </div>
@@ -82,9 +87,10 @@ export default function HomePage() {
 
       {/* Footer */}
       <footer className="border-t border-gray-200 py-6 text-center text-xs text-gray-400">
-        Built with <span className="text-blue-500 font-medium">pdf-lib</span>,{' '}
+        Built with <span className="text-blue-500 font-medium">Next.js</span>,{' '}
         <span className="text-blue-500 font-medium">PDF.js</span>, and{' '}
-        <span className="text-blue-500 font-medium">Next.js</span>
+        <span className="text-blue-500 font-medium">pdf-lib</span> •{' '}
+        <a href="https://github.com/Rajnikanth31/PDFlow" className="hover:underline">Open Source</a>
       </footer>
     </div>
   );

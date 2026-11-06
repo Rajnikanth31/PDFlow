@@ -261,6 +261,34 @@ export async function addTextToPDF(
 }
 
 /**
+ * Redact (blackout or whiteout) an area on a page
+ */
+export async function redactPDF(
+  pdfBytes: ArrayBuffer,
+  pageIndex: number,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  color: 'black' | 'white' = 'black'
+): Promise<Uint8Array> {
+  const pdf = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+  const pages = pdf.getPages();
+  if (pageIndex >= pages.length) throw new Error('Page index out of range');
+
+  const page = pages[pageIndex];
+  page.drawRectangle({
+    x,
+    y,
+    width,
+    height,
+    color: color === 'black' ? rgb(0, 0, 0) : rgb(1, 1, 1),
+  });
+
+  return pdf.save();
+}
+
+/**
  * Check whether a PDF is encrypted
  */
 export async function isPDFEncrypted(pdfBytes: ArrayBuffer): Promise<boolean> {
