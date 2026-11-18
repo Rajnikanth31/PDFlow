@@ -90,7 +90,7 @@ export default function PDFViewer({
 
   // Render page
   useEffect(() => {
-    if (!pdfDoc || !canvasRef.current) return;
+    if (!pdfDoc || !canvasRef.current || passwordCallback) return;
 
     const renderPage = async () => {
       if (renderTaskRef.current) {
@@ -112,7 +112,7 @@ export default function PDFViewer({
         canvas.width = viewport.width;
         canvas.height = viewport.height;
 
-        const renderTask = page.render({ canvasContext: ctx, viewport });
+        const renderTask = page.render({ canvasContext: ctx, canvas, viewport });
         renderTaskRef.current = renderTask;
         await renderTask.promise;
       } catch (err: unknown) {
@@ -125,7 +125,7 @@ export default function PDFViewer({
     };
 
     renderPage();
-  }, [pdfDoc, currentPage, scale]);
+  }, [pdfDoc, currentPage, scale, passwordCallback]);
 
   // Search logic across all pages
   const handleSearch = async () => {
@@ -176,7 +176,11 @@ export default function PDFViewer({
 
   const handlePasswordSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (passwordCallback && passwordInput) {
+    if (passwordCallback) {
+      if (!passwordInput.trim()) {
+        setPasswordError(true);
+        return;
+      }
       setPasswordError(false);
       passwordCallback(passwordInput);
       if (onPasswordSuccess) {
@@ -250,7 +254,7 @@ export default function PDFViewer({
         </div>
       )}
 
-      {passwordCallback ? (
+      {passwordCallback && (
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-sm w-full text-center border border-gray-100 my-auto">
           <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <Lock size={22} />
@@ -280,15 +284,17 @@ export default function PDFViewer({
             </button>
           </form>
         </div>
-      ) : (
-        <div
-          className={`shadow-2xl rounded-sm overflow-hidden transition-all duration-300 ${
-            isDarkMode ? 'bg-slate-900 invert-[0.9] hue-rotate-180 ring-1 ring-slate-800' : 'bg-white'
-          }`}
-        >
-          <canvas ref={canvasRef} className="block" />
-        </div>
       )}
+
+      <div
+        className={`shadow-2xl rounded-sm overflow-hidden transition-all duration-300 ${
+          passwordCallback ? 'hidden' : 'block'
+        } ${
+          isDarkMode ? 'bg-slate-900 invert-[0.9] hue-rotate-180 ring-1 ring-slate-800' : 'bg-white'
+        }`}
+      >
+        <canvas ref={canvasRef} className="block" />
+      </div>
     </div>
   );
 }

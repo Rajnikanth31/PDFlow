@@ -71,16 +71,17 @@ export default function HomePage() {
       <section className="max-w-6xl mx-auto px-6 pb-24">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {features.map(({ icon: Icon, title, desc, color }) => (
-            <div
+            <Link
               key={title}
-              className="bg-white/80 backdrop-blur-sm rounded-2xl p-5 border border-white shadow-sm hover:shadow-md transition-shadow"
+              href="/editor"
+              className="bg-white/80 backdrop-blur-sm rounded-2xl p-5 border border-white shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5 block group"
             >
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-4 ${color}`}>
                 <Icon size={18} />
               </div>
-              <h3 className="font-semibold text-gray-800 mb-1.5 text-sm">{title}</h3>
+              <h3 className="font-semibold text-gray-800 mb-1.5 text-sm group-hover:text-blue-600 transition-colors">{title}</h3>
               <p className="text-xs text-gray-500 leading-relaxed">{desc}</p>
-            </div>
+            </Link>
           ))}
         </div>
       </section>

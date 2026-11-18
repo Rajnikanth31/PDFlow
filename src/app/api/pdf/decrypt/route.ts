@@ -4,6 +4,7 @@ import path from 'path';
 import os from 'os';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { decryptPDF } from '@pdfsmaller/pdf-decrypt';
 
 const execFileAsync = promisify(execFile);
 
@@ -29,8 +30,7 @@ function findQpdfPath(): string | null {
     if (found) return found;
   }
 
-  // Fallback to system PATH
-  return 'qpdf';
+  return null;
 }
 
 export async function POST(req: NextRequest) {
@@ -43,31 +43,53 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No PDF file provided' }, { status: 400 });
     }
 
+    const arrayBuffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+
+    // 1. Try QPDF if executable is found
     const qpdfPath = findQpdfPath();
-    if (!qpdfPath) {
-      return NextResponse.json({ error: 'QPDF engine not available' }, { status: 500 });
+    if (qpdfPath) {
+      const tempDir = os.tmpdir();
+      const id = Math.random().toString(36).slice(2);
+      const inPath = path.join(tempDir, `in_${id}.pdf`);
+      const outPath = path.join(tempDir, `out_${id}.pdf`);
+
+      fs.writeFileSync(inPath, Buffer.from(bytes));
+
+      const args = [
+        password ? `--password=${password}` : '--password=',
+        '--decrypt',
+        inPath,
+        outPath,
+      ];
+
+      try {
+        await execFileAsync(qpdfPath, args);
+        const decryptedBytes = fs.readFileSync(outPath);
+
+        return new NextResponse(decryptedBytes, {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': `attachment; filename="unlocked_${file.name}"`,
+          },
+        });
+      } catch (err: unknown) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const stderr = (err as any)?.stderr?.toString() || '';
+        if (stderr.toLowerCase().includes('invalid password') || stderr.toLowerCase().includes('password')) {
+          return NextResponse.json({ error: 'Incorrect password' }, { status: 401 });
+        }
+      } finally {
+        if (fs.existsSync(inPath)) fs.unlinkSync(inPath);
+        if (fs.existsSync(outPath)) fs.unlinkSync(outPath);
+      }
     }
 
-    const tempDir = os.tmpdir();
-    const id = Math.random().toString(36).slice(2);
-    const inPath = path.join(tempDir, `in_${id}.pdf`);
-    const outPath = path.join(tempDir, `out_${id}.pdf`);
-
-    const arrayBuffer = await file.arrayBuffer();
-    fs.writeFileSync(inPath, Buffer.from(arrayBuffer));
-
-    const args = [
-      password ? `--password=${password}` : '--password=',
-      '--decrypt',
-      inPath,
-      outPath,
-    ];
-
+    // 2. Fall back to @pdfsmaller/pdf-decrypt (AES-256 and RC4)
     try {
-      await execFileAsync(qpdfPath, args);
-      const decryptedBytes = fs.readFileSync(outPath);
-
-      return new NextResponse(decryptedBytes, {
+      const decrypted = await decryptPDF(bytes, password);
+      return new NextResponse(Buffer.from(decrypted), {
         status: 200,
         headers: {
           'Content-Type': 'application/pdf',
@@ -75,18 +97,17 @@ export async function POST(req: NextRequest) {
         },
       });
     } catch (err: unknown) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const stderr = (err as any)?.stderr?.toString() || '';
-      if (stderr.toLowerCase().includes('invalid password') || stderr.toLowerCase().includes('password')) {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.toLowerCase().includes('not encrypted')) {
+        return NextResponse.json({ error: 'This PDF is not encrypted' }, { status: 400 });
+      }
+      if (msg.toLowerCase().includes('password')) {
         return NextResponse.json({ error: 'Incorrect password' }, { status: 401 });
       }
       return NextResponse.json(
-        { error: 'Failed to decrypt document. Please verify the password.' },
+        { error: msg || 'Failed to decrypt document. Please verify the password.' },
         { status: 400 }
       );
-    } finally {
-      if (fs.existsSync(inPath)) fs.unlinkSync(inPath);
-      if (fs.existsSync(outPath)) fs.unlinkSync(outPath);
     }
   } catch (err) {
     console.error('Decryption route error:', err);

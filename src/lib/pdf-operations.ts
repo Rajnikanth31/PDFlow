@@ -1,6 +1,18 @@
 import { PDFDocument, rgb, StandardFonts, degrees } from 'pdf-lib';
-import { isEncrypted as checkIsEncrypted, decryptPDF } from '@pdfsmaller/pdf-decrypt';
+import { decryptPDF } from '@pdfsmaller/pdf-decrypt';
 import { encryptPDF } from '@pdfsmaller/pdf-encrypt';
+
+/**
+ * Check if a PDF is encrypted using pdf-lib (supports all versions V=1-5, R=2-6)
+ */
+export async function checkIsEncrypted(pdfBytes: ArrayBuffer | Uint8Array): Promise<boolean> {
+  try {
+    const pdf = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+    return pdf.isEncrypted;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Merge multiple PDF files into one
@@ -82,7 +94,13 @@ export async function removePasswordFromPDF(
   pdfBytes: ArrayBuffer,
   password = ''
 ): Promise<Uint8Array> {
-  // 1. Try server-side QPDF engine first (full AES-128, AES-256, RC4 stream decryption)
+  const bytes = new Uint8Array(pdfBytes);
+  const isEnc = await checkIsEncrypted(bytes);
+  if (!isEnc) {
+    throw new Error('This PDF is not encrypted');
+  }
+
+  // 1. Try server-side QPDF / decrypt engine first
   try {
     const formData = new FormData();
     const blob = new Blob([pdfBytes], { type: 'application/pdf' });
@@ -109,26 +127,17 @@ export async function removePasswordFromPDF(
     console.warn('API decrypt failed, attempting client fallback:', err);
   }
 
-  const bytes = new Uint8Array(pdfBytes);
-
-  // 2. Try client-side decryptPDF (supports AES-256 and RC4)
-  if (password && password.trim()) {
-    try {
-      const decrypted = await decryptPDF(bytes, password);
-      return decrypted;
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : '';
-      if (msg.toLowerCase().includes('password') && !msg.toLowerCase().includes('unsupported')) {
-        throw err;
-      }
+  // 2. Client-side decrypt fallback with @pdfsmaller/pdf-decrypt
+  try {
+    const decrypted = await decryptPDF(bytes, password);
+    return decrypted;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : '';
+    if (msg.toLowerCase().includes('password')) {
+      throw new Error('Incorrect password');
     }
+    throw err;
   }
-
-  // 3. Fallback: Strip encryption dictionary via pdf-lib
-  const pdf = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  delete (pdf.context.trailerInfo as any).Encrypt;
-  return await pdf.save();
 }
 
 /**
@@ -321,7 +330,7 @@ export function uint8ArrayToDataUrl(bytes: Uint8Array, mimeType = 'application/p
  * Trigger browser download of a Uint8Array as a file
  */
 export function downloadPDF(bytes: Uint8Array, fileName: string): void {
-  const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' });
+  const blob = new Blob([bytes as BlobPart], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

@@ -26,6 +26,7 @@ import {
   addImageToPDF,
   getPDFPageCount,
   downloadPDF,
+  checkIsEncrypted,
 } from '@/lib/pdf-operations';
 
 // Dynamically import PDF viewer to avoid SSR issues
@@ -49,6 +50,17 @@ export default function EditorPage() {
   const [currentFilePassword, setCurrentFilePassword] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const handlePDFUpdate = async (data: ArrayBuffer | Uint8Array) => {
+    const buffer = data instanceof Uint8Array
+      ? (data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer)
+      : data;
+    setPdfBuffer(buffer);
+    const count = await getPDFPageCount(buffer);
+    setPageCount(count);
+    const url = URL.createObjectURL(new Blob([buffer], { type: 'application/pdf' }));
+    setPdfUrl(url);
+  };
+
   const loadPDF = useCallback(async (file: File) => {
     try {
       const buffer = await file.arrayBuffer();
@@ -59,6 +71,7 @@ export default function EditorPage() {
       setPageCount(count);
       setCurrentPage(1);
       setFileName(file.name);
+      setCurrentFilePassword('');
     } catch (err) {
       console.error('Error loading PDF:', err);
       alert('Failed to load PDF file.');
@@ -76,26 +89,36 @@ export default function EditorPage() {
     noClick: !!pdfUrl,
   });
 
-  const handlePDFUpdate = async (buffer: ArrayBuffer) => {
-    setPdfBuffer(buffer);
-    const count = await getPDFPageCount(buffer);
-    setPageCount(count);
-    const url = URL.createObjectURL(new Blob([buffer], { type: 'application/pdf' }));
-    setPdfUrl(url);
-  };
-
   const handleRemovePasswordClick = async () => {
     if (!pdfBuffer) return;
-    setLoading(true);
     try {
-      const result = await removePasswordFromPDF(pdfBuffer, currentFilePassword);
-      await handlePDFUpdate(result.buffer as ArrayBuffer);
-      setCurrentFilePassword('');
-      alert('Password removed! The PDF is now unlocked in the editor. You can download it anytime using the Download button.');
-    } catch {
+      const isEnc = await checkIsEncrypted(pdfBuffer);
+      if (!isEnc) {
+        alert('This document is not password protected.');
+        return;
+      }
+
+      // If we already have the password cached from unlocking when opening, try removing with it
+      if (currentFilePassword) {
+        setLoading(true);
+        try {
+          const result = await removePasswordFromPDF(pdfBuffer, currentFilePassword);
+          await handlePDFUpdate(result);
+          setCurrentFilePassword('');
+          alert('Password removed! The PDF is now unlocked in the editor. You can download it anytime using the Download button.');
+          return;
+        } catch {
+          // If cached password failed, proceed to ask user for password
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      // Prompt user to enter password
       setPasswordMode('remove');
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      console.error('Encryption check error:', err);
+      setPasswordMode('remove');
     }
   };
 
@@ -106,20 +129,27 @@ export default function EditorPage() {
       let result: Uint8Array;
       if (passwordMode === 'add') {
         result = await addPasswordToPDF(pdfBuffer, password, ownerPassword);
-        await handlePDFUpdate(result.buffer as ArrayBuffer);
+        await handlePDFUpdate(result);
         alert('Password protection added! Click Download when you are ready to save the file.');
       } else {
         result = await removePasswordFromPDF(pdfBuffer, password || currentFilePassword);
-        await handlePDFUpdate(result.buffer as ArrayBuffer);
+        await handlePDFUpdate(result);
         setCurrentFilePassword('');
         alert('Password removed! The PDF is now unlocked in the editor. You can download it anytime using the Download button.');
       }
-    } catch {
-      alert(
-        passwordMode === 'remove'
-          ? 'Incorrect password or unable to remove protection.'
-          : 'Failed to protect the PDF.'
-      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg === 'This PDF is not encrypted') {
+        alert('This PDF is not password protected.');
+      } else if (msg === 'Incorrect password' || msg.toLowerCase().includes('password')) {
+        alert('Incorrect password. Please verify the password and try again.');
+      } else {
+        alert(
+          passwordMode === 'remove'
+            ? 'Unable to remove password from this PDF.'
+            : 'Failed to protect the PDF.'
+        );
+      }
     } finally {
       setLoading(false);
       setPasswordMode(null);
@@ -138,7 +168,7 @@ export default function EditorPage() {
         pdfBuffer, imageBuffer, 'png',
         currentPage - 1, 50, 50, 200, 80
       );
-      await handlePDFUpdate(result.buffer as ArrayBuffer);
+      await handlePDFUpdate(result);
     } catch (err) {
       console.error(err);
       alert('Failed to embed signature.');
